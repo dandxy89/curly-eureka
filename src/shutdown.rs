@@ -3,6 +3,7 @@ use std::time::Duration;
 use tokio::signal;
 use tracing::info;
 
+/// Graceful shutdown signal handling
 pub async fn shutdown_signal() {
     let ctrl_c = async {
         signal::ctrl_c()
@@ -27,5 +28,5 @@ pub async fn shutdown_signal() {
     }
 
     info!("Received termination signal shutting down");
-    tokio::time::sleep(Duration::from_secs(2)).await
+    tokio::time::sleep(Duration::from_secs(11)).await
 }

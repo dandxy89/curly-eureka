@@ -1,5 +1,6 @@
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
+/// Enables the tracing crate for all logging and tracing functionality
 pub fn init_logging() {
     tracing_subscriber::registry()
         .with(
