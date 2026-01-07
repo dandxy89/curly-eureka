@@ -48,7 +48,15 @@
     - On start of the application seed the database (truncate / run migrations)
 - Dependencies
     - `serde` & `serde JSON`
+        - `cargo add serde --features derive`
+        - `cargo add chrono --features derive`
+        - `cargo add serde-json`
     - `axum-rs`
+        - `cargo add axum --features http2,json`
+        - `cargo add tokio --features macros,rt-multi-thread,full`
+        - `cargo add tower`
     - `diesel-rs` for interaction with the database
+        - `cargo add diesel --features "sqlite,chrono,numeric,serde_json"`
     - `csv` for reading and parsing the CSV file
+        - `cargo add csv --features serde`
 
