@@ -14,6 +14,18 @@
 - We expect to see production-like code.
     Information how the service is set up, tested and deployed must be provided.
 
+## Setup Locally
+
+Follow the steps below to get setup:
+
+```bash
+# Install the diesel_cli
+# https://github.com/diesel-rs/diesel/blob/main/diesel_cli/README.md
+cargo install diesel_cli --no-default-features --features "postgres"
+
+# Start a local PG instance
+docker compose up -d --force-recreate
+```
 ## Proposed Solution
 
 - REQUESTS: Add Rust Models for the following
