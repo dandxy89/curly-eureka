@@ -10,14 +10,14 @@ use std::io::Write;
 
 #[derive(Debug, PartialEq, Eq, FromSqlRow, AsExpression, Deserialize, Serialize, Clone, Copy)]
 #[diesel(sql_type = crate::renewable_schema::sql_types::AggregationKind)]
-pub enum AggregationKind {
+pub enum Aggregation {
     Hourly,
     DayInMonth,
     Monthly,
     Yearly,
 }
 
-impl FromSql<crate::renewable_schema::sql_types::AggregationKind, Pg> for AggregationKind {
+impl FromSql<crate::renewable_schema::sql_types::AggregationKind, Pg> for Aggregation {
     fn from_sql(bytes: PgValue<'_>) -> diesel::deserialize::Result<Self> {
         match bytes.as_bytes() {
             b"Hourly" => Ok(Self::Hourly),
@@ -29,7 +29,7 @@ impl FromSql<crate::renewable_schema::sql_types::AggregationKind, Pg> for Aggreg
     }
 }
 
-impl ToSql<crate::renewable_schema::sql_types::AggregationKind, Pg> for AggregationKind {
+impl ToSql<crate::renewable_schema::sql_types::AggregationKind, Pg> for Aggregation {
     fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Pg>) -> diesel::serialize::Result {
         let s = match self {
             Self::Hourly => "Hourly",
@@ -42,13 +42,13 @@ impl ToSql<crate::renewable_schema::sql_types::AggregationKind, Pg> for Aggregat
     }
 }
 
-impl From<AggregationKind> for &str {
-    fn from(kind: AggregationKind) -> Self {
+impl From<Aggregation> for &str {
+    fn from(kind: Aggregation) -> Self {
         match kind {
-            AggregationKind::Hourly => "hour",
-            AggregationKind::DayInMonth => "day",
-            AggregationKind::Monthly => "month",
-            AggregationKind::Yearly => "year",
+            Aggregation::Hourly => "hour",
+            Aggregation::DayInMonth => "day",
+            Aggregation::Monthly => "month",
+            Aggregation::Yearly => "year",
         }
     }
 }
@@ -61,6 +61,6 @@ pub struct TimeSeriesRange {
 
 #[derive(Debug, Deserialize)]
 pub struct TimeSeriesAggregationRequest {
-    pub aggregation_kind: AggregationKind,
+    pub aggregation_kind: Aggregation,
     pub datetime_filter: TimeSeriesRange,
 }

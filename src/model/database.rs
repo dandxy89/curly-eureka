@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use diesel::{Insertable, Queryable, QueryableByName, Selectable};
 use serde::Serialize;
 
-use crate::model::{api_request::AggregationKind, csv::CSVRecord};
+use crate::model::{api_request::Aggregation, csv::CSVRecord};
 
 #[derive(Queryable, Insertable, QueryableByName, Debug)]
 #[diesel(table_name = crate::renewable_schema::ts_metadata)]
@@ -47,14 +47,14 @@ pub struct QueryHistory {
     pub executed_at: DateTime<Utc>,
     pub from_date: Option<DateTime<Utc>>,
     pub to_date: Option<DateTime<Utc>>,
-    pub aggregation: AggregationKind,
+    pub aggregation: Aggregation,
 }
 
 impl QueryHistory {
     pub fn new(
         from_date: Option<DateTime<Utc>>,
         to_date: Option<DateTime<Utc>>,
-        aggregation: AggregationKind,
+        aggregation: Aggregation,
     ) -> Self {
         Self {
             id: 0,

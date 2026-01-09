@@ -16,6 +16,12 @@ docker compose up -d --force-recreate
 echo $DATABASE_URL
 diesel database setup
 diesel database reset
+
+# Copy example env
+cp .env.example .env
+
+# Test the Code Base (requires Docker instance running)
+cargo test
 ```
 
 ## Example Curl Queries
