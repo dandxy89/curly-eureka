@@ -1,20 +1,42 @@
-use std::{env, error::Error};
+use std::env;
 
-use diesel::{Connection as _, PgConnection, pg::Pg};
-use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
+use deadpool_diesel::{InteractError, Manager, Pool, PoolError, Runtime, postgres::BuildError};
+use diesel::PgConnection;
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness as _, embed_migrations};
 
-const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
+pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
-pub fn establish_connection() -> PgConnection {
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    PgConnection::establish(&database_url)
-        .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
+#[derive(thiserror::Error, Debug)]
+pub enum PgError {
+    #[error("missing DATABASE_URL")]
+    DatabaseURL,
+    #[error("unable to build pool")]
+    PoolBuildError(BuildError),
+    #[error("unable to apply migrations {0}")]
+    MigrationError(InteractError),
+    #[error("unable to get connection from pool")]
+    ConnectionError(PoolError),
 }
 
-pub fn run_migrations<MH>(conn: &mut MH) -> Result<(), Box<dyn Error + Send + Sync + 'static>>
-where
-    MH: MigrationHarness<Pg>,
-{
-    conn.run_pending_migrations(MIGRATIONS)?;
-    Ok(())
+pub async fn establish_pg_connection() -> Result<Pool<Manager<PgConnection>>, PgError> {
+    let database_url = env::var("DATABASE_URL").map_err(|_| PgError::DatabaseURL)?;
+    let pg_manager = Manager::new(database_url, Runtime::Tokio1);
+
+    let pg_pool: Pool<Manager<PgConnection>> = Pool::builder(pg_manager)
+        .build()
+        .map_err(|e| PgError::PoolBuildError(e))?;
+
+    {
+        let conn = pg_pool
+            .get()
+            .await
+            .map_err(|e| PgError::ConnectionError(e))?;
+
+        conn.interact(|conn| conn.run_pending_migrations(MIGRATIONS).map(|_| ()))
+            .await
+            .map_err(|e| PgError::MigrationError(e))?
+            .unwrap();
+    }
+
+    Ok(pg_pool)
 }

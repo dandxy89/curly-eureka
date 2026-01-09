@@ -1,23 +1,22 @@
-use std::{net::SocketAddr, time::Duration};
+use std::{error::Error, net::SocketAddr, time::Duration};
 
 use axum::{Router, http::StatusCode, routing::get};
 use dotenvy::dotenv;
 use renewable_ts_axum::{
-    db::{establish_connection, run_migrations},
-    logger::init_logging,
-    shutdown::shutdown_signal,
+    db::establish_pg_connection, logger::init_logging, shutdown::shutdown_signal,
 };
 use tokio::net::TcpListener;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
-use tracing::info;
+use tracing::{error, info};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     dotenv().ok();
     init_logging();
 
-    let mut pg_connection = establish_connection();
-    run_migrations(&mut pg_connection).unwrap();
+    let pg_pool = establish_pg_connection()
+        .await
+        .inspect_err(|e| error!("Unable to configure DB: {e:?}"))?;
 
     // TODO: Truncate or Handle Conflicts (on load of CSV)
 
@@ -28,7 +27,8 @@ async fn main() {
         .layer((
             TraceLayer::new_for_http(),
             TimeoutLayer::with_status_code(StatusCode::GATEWAY_TIMEOUT, Duration::from_secs(10)),
-        ));
+        ))
+        .with_state(pg_pool);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
     info!("listening on {addr}");
@@ -36,6 +36,6 @@ async fn main() {
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
-        .await
-        .unwrap();
+        .await?;
+    Ok(())
 }

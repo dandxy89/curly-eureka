@@ -55,10 +55,25 @@ pub mod csv {
     }
 }
 
+pub mod database {
+    use chrono::{DateTime, Utc};
+    use diesel::{Insertable, Queryable, QueryableByName};
+
+    #[derive(Queryable, Insertable, QueryableByName, Debug)]
+    #[diesel(table_name = crate::schema::ts_metadata)]
+    pub struct TSMetadata {
+        pub ingestion_id: i64,
+        pub ingestion_datetime: DateTime<Utc>,
+        pub source: String,
+    }
+}
+
 pub mod request {
     use chrono::{DateTime, Utc};
+    use diesel::{AsExpression, deserialize::FromSqlRow};
 
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Debug, PartialEq, Eq, FromSqlRow, AsExpression)]
+    #[diesel(sql_type = crate::schema::sql_types::AggregationKind)]
     pub enum AggregationKind {
         Hourly,
         DayInMonth,
@@ -80,15 +95,15 @@ pub mod response {
     use crate::model::request::{AggregationKind, TimeSeriesRange};
 
     #[derive(Debug)]
-    pub struct QueryRecord {
+    pub struct AggregationQueryRecord {
         datetime: DateTime<Utc>,
-        value: BigDecimal,
+        total_amount: BigDecimal,
     }
 
     #[derive(Debug)]
     pub struct QueryResponse {
         executed_at: DateTime<Utc>,
-        values: Vec<QueryRecord>,
+        records: Vec<AggregationQueryRecord>,
     }
 
     #[derive(Debug)]

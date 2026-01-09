@@ -25,7 +25,13 @@ cargo install diesel_cli --no-default-features --features "postgres"
 
 # Start a local PG instance
 docker compose up -d --force-recreate
+
+# Setup with Migrations
+echo $DATABASE_URL
+diesel database setup
+diesel database reset
 ```
+
 ## Proposed Solution
 
 - REQUESTS: Add Rust Models for the following
