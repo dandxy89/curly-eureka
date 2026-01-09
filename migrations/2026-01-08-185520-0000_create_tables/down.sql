@@ -1,4 +1,4 @@
-DROP TABLE IF EXISTS ts_store;
-DROP TABLE IF EXISTS ts_metadata;
-DROP TABLE IF EXISTS query_history;
-DROP TYPE IF EXISTS aggregation_kind;
+DROP TABLE IF EXISTS renewable.ts_store;
+DROP TABLE IF EXISTS renewable.ts_metadata;
+DROP TABLE IF EXISTS renewable.query_history;
+DROP TYPE IF EXISTS renewable.aggregation_kind;
