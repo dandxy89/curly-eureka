@@ -38,3 +38,18 @@ curl -X POST -H "Content-Type: application/json" -d '{"aggregation_kind": "Month
 # Show query history
 curl -X GET 0.0.0.0:8000/timeseries/v1/query/history | jq
 ```
+
+## Deployment
+
+- Deploying the Binary: Create Dockerfile with 2 stages
+  1. The first stage should be used for building the container e.g. `rust:1.92.0-slim-bookworm`
+  2. The second stahe will then be used for deployment into ECR where the Image is more lightweight e.g. `debian:bookworm-20251117-slim`
+     a. Configuration for DB passed in at runtime via the SecretsManager via Environment Variables
+     b. Create a non-root user and limit the permissions where possible
+
+### AWS Deployment
+
+- Push image to ECR via GH Workflow
+- Deploy to ECS (Fargate launch type)
+- Route traffic through an Application Load Balancer (ALB)
+  - Consider API Gateway + ALB eventually
