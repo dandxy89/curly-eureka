@@ -24,17 +24,14 @@ pub async fn establish_pg_connection() -> Result<Pool<Manager<PgConnection>>, Pg
 
     let pg_pool: Pool<Manager<PgConnection>> = Pool::builder(pg_manager)
         .build()
-        .map_err(|e| PgError::PoolBuildError(e))?;
+        .map_err(PgError::PoolBuildError)?;
 
     {
-        let conn = pg_pool
-            .get()
-            .await
-            .map_err(|e| PgError::ConnectionError(e))?;
+        let conn = pg_pool.get().await.map_err(PgError::ConnectionError)?;
 
         conn.interact(|conn| conn.run_pending_migrations(MIGRATIONS).map(|_| ()))
             .await
-            .map_err(|e| PgError::MigrationError(e))?
+            .map_err(PgError::MigrationError)?
             .unwrap();
     }
 
