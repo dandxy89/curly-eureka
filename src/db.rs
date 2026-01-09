@@ -1,14 +1,14 @@
 use std::{env, fs::File, io::BufReader, path::Path};
 
 use deadpool_diesel::{InteractError, Manager, Pool, PoolError, Runtime, postgres::BuildError};
-use diesel::{OptionalExtension, PgConnection, RunQueryDsl, connection::Connection};
+use diesel::{OptionalEmptyChangesetExtension, PgConnection, RunQueryDsl, connection::Connection};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness as _, embed_migrations};
 use tracing::{error, info};
 
 use crate::{
     file_reader::csv_stream,
     model::database::{TSMetadata, TSStore},
-    schema,
+    renewable_schema,
 };
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
@@ -88,12 +88,12 @@ pub async fn seed_database(pg_pool: &deadpool_diesel::postgres::Pool) -> Result<
     conn.interact(|conn| {
         conn.transaction::<_, diesel::result::Error, _>(|conn| {
             // Insert Metadata about the seed file
-            let Ok(Some(ingestion_id)) = diesel::insert_into(schema::ts_metadata::table)
+            let Ok(Some(ingestion_id)) = diesel::insert_into(renewable_schema::ts_metadata::table)
                 .values(TSMetadata::new(env_var))
-                .returning(schema::ts_metadata::ingestion_id)
+                .returning(renewable_schema::ts_metadata::ingestion_id)
                 .on_conflict_do_nothing()
                 .get_result::<i64>(conn)
-                .optional()
+                .optional_empty_changeset()
             else {
                 info!("Data has already been ingested");
                 return Ok(());
@@ -107,12 +107,13 @@ pub async fn seed_database(pg_pool: &deadpool_diesel::postgres::Pool) -> Result<
                 .collect();
 
             // Insert Time Series data
-            let inserted_rows = diesel::insert_into(schema::ts_store::table)
+            let inserted_rows = diesel::insert_into(renewable_schema::ts_store::table)
                 .values(records)
                 .on_conflict_do_nothing()
-                .execute(conn)?;
+                .execute(conn)
+                .optional_empty_changeset()?;
 
-            info!("Seeded database with {inserted_rows} records");
+            info!("Seeded database with {inserted_rows:?} records");
             Ok(())
         })
     })

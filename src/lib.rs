@@ -6,3 +6,5 @@ pub mod shutdown;
 
 #[allow(clippy::wildcard_imports)]
 pub mod schema;
+
+pub use schema::renewable as renewable_schema;

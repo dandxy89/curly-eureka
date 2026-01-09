@@ -58,12 +58,13 @@ pub mod csv {
 pub mod database {
     use bigdecimal::BigDecimal;
     use chrono::{DateTime, Utc};
-    use diesel::{Insertable, Queryable, QueryableByName};
+    use diesel::{Insertable, Queryable, QueryableByName, Selectable};
+    use serde::Serialize;
 
     use crate::model::{csv::CSVRecord, request::AggregationKind};
 
     #[derive(Queryable, Insertable, QueryableByName, Debug)]
-    #[diesel(table_name = crate::schema::ts_metadata)]
+    #[diesel(table_name = crate::renewable_schema::ts_metadata)]
     pub struct TSMetadata {
         pub ingestion_datetime: DateTime<Utc>,
         pub source: String,
@@ -79,7 +80,7 @@ pub mod database {
     }
 
     #[derive(Queryable, Insertable, QueryableByName, Debug)]
-    #[diesel(table_name = crate::schema::ts_store)]
+    #[diesel(table_name = crate::renewable_schema::ts_store)]
     pub struct TSStore {
         pub ingestion_id: i64,
         pub datetime: DateTime<Utc>,
@@ -96,22 +97,30 @@ pub mod database {
         }
     }
 
-    #[derive(Queryable, Insertable, QueryableByName, Debug)]
-    #[diesel(table_name = crate::schema::query_history)]
+    #[derive(Queryable, Insertable, QueryableByName, Debug, Selectable, Serialize)]
+    #[diesel(table_name = crate::renewable_schema::query_history)]
     pub struct QueryHistory {
+        pub id: i64,
         pub executed_at: DateTime<Utc>,
-        pub from_date: DateTime<Utc>,
-        pub to_date: DateTime<Utc>,
+        pub from_date: Option<DateTime<Utc>>,
+        pub to_date: Option<DateTime<Utc>>,
         pub aggregation: AggregationKind,
     }
 }
 
 pub mod request {
     use chrono::{DateTime, Utc};
-    use diesel::{AsExpression, deserialize::FromSqlRow};
+    use diesel::{
+        AsExpression,
+        deserialize::{FromSql, FromSqlRow},
+        pg::{Pg, PgValue},
+    };
+    use serde::{Deserialize, Serialize};
 
-    #[derive(Debug, PartialEq, Eq, FromSqlRow, AsExpression)]
-    #[diesel(sql_type = crate::schema::sql_types::AggregationKind)]
+    #[derive(
+        Debug, PartialEq, Eq, FromSqlRow, AsExpression, Deserialize, Serialize, Clone, Copy,
+    )]
+    #[diesel(sql_type = crate::renewable_schema::sql_types::AggregationKind)]
     pub enum AggregationKind {
         Hourly,
         DayInMonth,
@@ -119,18 +128,34 @@ pub mod request {
         Yearly,
     }
 
-    #[derive(Debug)]
+    impl FromSql<crate::renewable_schema::sql_types::AggregationKind, Pg> for AggregationKind {
+        fn from_sql(bytes: PgValue<'_>) -> diesel::deserialize::Result<Self> {
+            match bytes.as_bytes() {
+                b"Hourly" => Ok(Self::Hourly),
+                b"DayInMonth" => Ok(Self::DayInMonth),
+                b"Monthly" => Ok(Self::Monthly),
+                b"Yearly" => Ok(Self::Yearly),
+                _ => Err("Unrecognized enum variant".into()),
+            }
+        }
+    }
+
+    #[derive(Debug, Deserialize)]
     pub struct TimeSeriesRange {
         from_date: Option<DateTime<Utc>>,
         to_date: Option<DateTime<Utc>>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct TimeSeriesAggregationRequest {
+        aggregation_kind: AggregationKind,
+        datetime_filter: TimeSeriesRange,
     }
 }
 
 pub mod response {
     use bigdecimal::BigDecimal;
     use chrono::{DateTime, Utc};
-
-    use crate::model::request::{AggregationKind, TimeSeriesRange};
 
     #[derive(Debug)]
     pub struct AggregationQueryRecord {
@@ -142,12 +167,5 @@ pub mod response {
     pub struct QueryResponse {
         executed_at: DateTime<Utc>,
         records: Vec<AggregationQueryRecord>,
-    }
-
-    #[derive(Debug)]
-    pub struct QueryHistoryRecord {
-        executed_at: DateTime<Utc>,
-        time_range: TimeSeriesRange,
-        aggregation: AggregationKind,
     }
 }
