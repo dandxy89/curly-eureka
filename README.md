@@ -1,19 +1,5 @@
 # Technical Test for Renewable
 
-## Task Definition
-
-1. Create a web backend which allows querying the time series data from the attached file.
-    The service must support summing the time series based on different types of aggregation: hourly, day of month, monthly.
-    It should also allow setting date filters for the query.
-2. Add support for getting the last 10 historic queries with the filter values(dates and type of aggregation).
-
-## Requirements
-- The service must be created using `axum-rs` and `diesel-rs`.
-- The APIs must respond with `JSON`.
-- Data storage in SQL database.
-- We expect to see production-like code.
-    Information how the service is set up, tested and deployed must be provided.
-
 ## Setup Locally
 
 Follow the steps below to get setup:
@@ -32,49 +18,17 @@ diesel database setup
 diesel database reset
 ```
 
-## Proposed Solution
+## Example Curl Queries
 
-- REQUESTS: Add Rust Models for the following
-    - `TimeSeriesRange`
-        - `FromDate` - Optional / ISO 8601
-        - `ToDate` - Optional / ISO 8601
-    - `TimeSeriesAggregation` Enum
-        - Hourly
-        - Day in Month
-        - Monthly
-        - Yearly
-    - Will assume all datetimes will be provided in UTC
-- ENDPOINTS:
-    - `/api/time-series/v1/query`
-        - POST
-        - Aggregation will all be handled in SQL
-        - Either use SQLite or PG
-        - Order in ASC order
-    - `/api/time-series/v1/history`
-        - GET
-    - Status Codes
-        - `400` invalid payload
-            - Will add basic validation to ensure that the From and To datetimes are in the correct format.
-        - `500` internal server error
-- RESPONSE:
-    - `/api/time-series/v1/query`
-        - `{"query_executed_ts": "XYZ", "unit": "MwH", "values": [{"datetime": "XYZ": "value": 123}]}`
-    - `/api/time-series/v1/history`
-        - `[{"query_executed_ts": "XYZ", "time_range": {"from_date": "XYZ"}, "aggregation": "monthly"}]`
-- CSV Parsing
-    - Add Model that Parses the CSV file
-    - On start of the application seed the database (truncate / run migrations)
-- Dependencies
-    - `serde` & `serde JSON`
-        - `cargo add serde --features derive`
-        - `cargo add chrono --features derive`
-        - `cargo add serde-json`
-    - `axum-rs`
-        - `cargo add axum --features http2,json`
-        - `cargo add tokio --features macros,rt-multi-thread,full`
-        - `cargo add tower`
-    - `diesel-rs` for interaction with the database
-        - `cargo add diesel --features "sqlite,chrono,numeric,serde_json"`
-    - `csv` for reading and parsing the CSV file
-        - `cargo add csv --features serde`
+```bash
+# Aggregation ONLY
+curl -X POST -H "Content-Type: application/json" -d '{"aggregation_kind": "Hourly", "datetime_filter": {}}' 0.0.0.0:8000/timeseries/v1/query | jq
+curl -X POST -H "Content-Type: application/json" -d '{"aggregation_kind": "Monthly", "datetime_filter": {}}' 0.0.0.0:8000/timeseries/v1/query | jq
+curl -X POST -H "Content-Type: application/json" -d '{"aggregation_kind": "Yearly", "datetime_filter": {}}' 0.0.0.0:8000/timeseries/v1/query | jq
 
+# Aggregation AND date_filtering
+curl -X POST -H "Content-Type: application/json" -d '{"aggregation_kind": "Monthly", "datetime_filter": {"from_date": "2025-01-01T00:00:00Z", "to_date": "2025-01-19T00:00:00Z"}}' 0.0.0.0:8000/timeseries/v1/query | jq
+
+# Show query history
+curl -X GET 0.0.0.0:8000/timeseries/v1/query/history | jq
+```

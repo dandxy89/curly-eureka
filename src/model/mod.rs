@@ -1,38 +1,49 @@
 #![allow(dead_code)]
 
-mod decoder {
-    use std::str::FromStr;
+use std::str::FromStr;
 
-    use bigdecimal::BigDecimal;
-    use chrono::{DateTime, NaiveDateTime, Utc};
-    use serde::{Deserialize as _, Deserializer, de::Error};
+use bigdecimal::{BigDecimal, ToPrimitive as _};
+use chrono::{DateTime, NaiveDateTime, Utc};
+use serde::{Deserialize as _, Deserializer, Serializer, de::Error};
 
-    const DATETIME_FORMAT: &str = "%-d %b %Y %H:%M";
+const DATETIME_FORMAT: &str = "%-d %b %Y %H:%M";
 
-    pub fn deserialize_datetime<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        let naive = NaiveDateTime::parse_from_str(&s, DATETIME_FORMAT).map_err(D::Error::custom)?;
-        Ok(DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc))
-    }
+pub fn deserialize_datetime<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    let naive = NaiveDateTime::parse_from_str(&s, DATETIME_FORMAT).map_err(D::Error::custom)?;
+    Ok(DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc))
+}
 
-    pub fn deserialize_decimal<'de, D>(deserializer: D) -> Result<BigDecimal, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        String::deserialize(deserializer).and_then(|s| {
-            let cleaned_string = s.trim().trim_matches('"').replace(',', "");
-            if cleaned_string.is_empty() {
-                return Err(Error::custom(
-                    "Unable to parse to BigDecimal due to empty string",
-                ));
-            }
+pub fn deserialize_decimal<'de, D>(deserializer: D) -> Result<BigDecimal, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    String::deserialize(deserializer).and_then(|s| {
+        let cleaned_string = s.trim().trim_matches('"').replace(',', "");
+        if cleaned_string.is_empty() {
+            return Err(Error::custom(
+                "Unable to parse to BigDecimal due to empty string",
+            ));
+        }
 
-            BigDecimal::from_str(&cleaned_string)
-                .map_err(|err| Error::custom(format!("Unable to parse to BigDecimal: {err}")))
-        })
+        BigDecimal::from_str(&cleaned_string)
+            .map_err(|err| Error::custom(format!("Unable to parse to BigDecimal: {err}")))
+    })
+}
+
+pub fn serialize_opt_bigdecimal<S>(
+    value: &Option<BigDecimal>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match value {
+        Some(v) => serializer.serialize_some(&v.to_f64()),
+        None => serializer.serialize_none(),
     }
 }
 
@@ -44,12 +55,12 @@ pub mod csv {
     pub struct CSVRecord {
         #[serde(
             rename = "Time (UTC)",
-            deserialize_with = "super::decoder::deserialize_datetime"
+            deserialize_with = "super::deserialize_datetime"
         )]
         pub datetime: DateTime<Utc>,
         #[serde(
             rename = "Quantity kWh",
-            deserialize_with = "super::decoder::deserialize_decimal"
+            deserialize_with = "super::deserialize_decimal"
         )]
         pub amount: BigDecimal,
     }
@@ -100,11 +111,28 @@ pub mod database {
     #[derive(Queryable, Insertable, QueryableByName, Debug, Selectable, Serialize)]
     #[diesel(table_name = crate::renewable_schema::query_history)]
     pub struct QueryHistory {
+        #[diesel(skip_insertion)]
         pub id: i64,
         pub executed_at: DateTime<Utc>,
         pub from_date: Option<DateTime<Utc>>,
         pub to_date: Option<DateTime<Utc>>,
         pub aggregation: AggregationKind,
+    }
+
+    impl QueryHistory {
+        pub fn new(
+            from_date: Option<DateTime<Utc>>,
+            to_date: Option<DateTime<Utc>>,
+            aggregation: AggregationKind,
+        ) -> Self {
+            Self {
+                id: 0,
+                executed_at: Utc::now(),
+                from_date,
+                to_date,
+                aggregation,
+            }
+        }
     }
 }
 
@@ -114,8 +142,10 @@ pub mod request {
         AsExpression,
         deserialize::{FromSql, FromSqlRow},
         pg::{Pg, PgValue},
+        serialize::{IsNull, Output, ToSql},
     };
     use serde::{Deserialize, Serialize};
+    use std::io::Write;
 
     #[derive(
         Debug, PartialEq, Eq, FromSqlRow, AsExpression, Deserialize, Serialize, Clone, Copy,
@@ -140,32 +170,58 @@ pub mod request {
         }
     }
 
+    impl ToSql<crate::renewable_schema::sql_types::AggregationKind, Pg> for AggregationKind {
+        fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Pg>) -> diesel::serialize::Result {
+            let s = match self {
+                Self::Hourly => "Hourly",
+                Self::DayInMonth => "DayInMonth",
+                Self::Monthly => "Monthly",
+                Self::Yearly => "Yearly",
+            };
+            out.write_all(s.as_bytes())?;
+            Ok(IsNull::No)
+        }
+    }
+
+    impl From<AggregationKind> for &str {
+        fn from(kind: AggregationKind) -> Self {
+            match kind {
+                AggregationKind::Hourly => "hour",
+                AggregationKind::DayInMonth => "day",
+                AggregationKind::Monthly => "month",
+                AggregationKind::Yearly => "year",
+            }
+        }
+    }
+
     #[derive(Debug, Deserialize)]
     pub struct TimeSeriesRange {
-        from_date: Option<DateTime<Utc>>,
-        to_date: Option<DateTime<Utc>>,
+        pub from_date: Option<DateTime<Utc>>,
+        pub to_date: Option<DateTime<Utc>>,
     }
 
     #[derive(Debug, Deserialize)]
     pub struct TimeSeriesAggregationRequest {
-        aggregation_kind: AggregationKind,
-        datetime_filter: TimeSeriesRange,
+        pub aggregation_kind: AggregationKind,
+        pub datetime_filter: TimeSeriesRange,
     }
 }
 
 pub mod response {
     use bigdecimal::BigDecimal;
     use chrono::{DateTime, Utc};
+    use serde::Serialize;
 
-    #[derive(Debug)]
+    #[derive(Debug, diesel::Queryable, Serialize)]
     pub struct AggregationQueryRecord {
-        datetime: DateTime<Utc>,
-        total_amount: BigDecimal,
+        pub datetime: DateTime<Utc>,
+        #[serde(serialize_with = "super::serialize_opt_bigdecimal")]
+        pub total_amount: Option<BigDecimal>,
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Serialize)]
     pub struct QueryResponse {
-        executed_at: DateTime<Utc>,
-        records: Vec<AggregationQueryRecord>,
+        pub executed_at: DateTime<Utc>,
+        pub records: Vec<AggregationQueryRecord>,
     }
 }
