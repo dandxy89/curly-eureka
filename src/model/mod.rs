@@ -56,15 +56,53 @@ pub mod csv {
 }
 
 pub mod database {
+    use bigdecimal::BigDecimal;
     use chrono::{DateTime, Utc};
     use diesel::{Insertable, Queryable, QueryableByName};
+
+    use crate::model::{csv::CSVRecord, request::AggregationKind};
 
     #[derive(Queryable, Insertable, QueryableByName, Debug)]
     #[diesel(table_name = crate::schema::ts_metadata)]
     pub struct TSMetadata {
-        pub ingestion_id: i64,
         pub ingestion_datetime: DateTime<Utc>,
         pub source: String,
+    }
+
+    impl TSMetadata {
+        pub fn new(source: String) -> Self {
+            Self {
+                ingestion_datetime: Utc::now(),
+                source,
+            }
+        }
+    }
+
+    #[derive(Queryable, Insertable, QueryableByName, Debug)]
+    #[diesel(table_name = crate::schema::ts_store)]
+    pub struct TSStore {
+        pub ingestion_id: i64,
+        pub datetime: DateTime<Utc>,
+        pub amount: BigDecimal,
+    }
+
+    impl From<(i64, CSVRecord)> for TSStore {
+        fn from((ingestion_id, CSVRecord { datetime, amount }): (i64, CSVRecord)) -> Self {
+            Self {
+                ingestion_id,
+                datetime,
+                amount,
+            }
+        }
+    }
+
+    #[derive(Queryable, Insertable, QueryableByName, Debug)]
+    #[diesel(table_name = crate::schema::query_history)]
+    pub struct QueryHistory {
+        pub executed_at: DateTime<Utc>,
+        pub from_date: DateTime<Utc>,
+        pub to_date: DateTime<Utc>,
+        pub aggregation: AggregationKind,
     }
 }
 
