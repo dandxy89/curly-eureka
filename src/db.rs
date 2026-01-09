@@ -136,7 +136,8 @@ pub mod query {
 
     use crate::{
         model::{
-            database::QueryHistory, request::AggregationKind, response::AggregationQueryRecord,
+            api_request::AggregationKind, api_response::AggregationQueryRecord,
+            database::QueryHistory,
         },
         renewable_schema::{
             query_history::dsl::{executed_at, query_history},
